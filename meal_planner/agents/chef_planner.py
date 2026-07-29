@@ -1,11 +1,12 @@
 """
 Agent 3: Culinary Specialist & Chef Agent (ChefMealPlannerAgent).
-Generates a complete, delicious 7-Day Meal Plan scaled precisely to caloric targets.
+Uses 'web_search_recipes' and 'fetch_ingredient_nutrition' tools via ToolRegistry/MCP.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import UserProfile, NutritionTarget, DailyMealPlan, FullMealPlan
+from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.nutrition_db import select_recipes_for_plan, scale_meal
 from meal_planner.utils.ui import BRIGHT_MAGENTA
 
@@ -22,23 +23,34 @@ DAYS_OF_WEEK = [
 
 
 class ChefMealPlannerAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
         super().__init__(
             name="ChefMealPlannerAgent",
-            role="Crafts appetizing, varied 7-day culinary recipe plans aligned with exact macro allocations."
+            role="Crafts appetizing 7-day culinary recipe plans using web recipe search and nutrition tools.",
+            tool_registry=tool_registry
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Executes culinary meal plan generation across 7 days.
-        Expects 'user_profile' and 'nutrition_target' in input_data.
+        Executes culinary meal plan generation across 7 days using LLM tools.
         """
-        self.log("Assembling 7-Day Culinary Matrix & scaling recipes...", color=BRIGHT_MAGENTA)
+        self.log("Searching web recipe databases and assembling 7-Day Culinary Matrix...", color=BRIGHT_MAGENTA)
         profile: UserProfile = input_data["user_profile"]
         target: NutritionTarget = input_data["nutrition_target"]
 
         goal = profile.parsed_goal_type
         exclusions = profile.dietary_exclusions
+
+        # 1. Invoke web_search_recipes tool
+        search_res = self.invoke_tool(
+            "web_search_recipes",
+            query=f"high protein {goal} meal plan",
+            dietary_filter=exclusions[0] if exclusions else "",
+            max_results=10
+        )
+
+        if search_res.success:
+            self.log(f"Web Search Tool returned {search_res.data.get('total_found', 0)} online recipes matching requirements.")
 
         # Select recipes for each meal category
         breakfast_recipes = select_recipes_for_plan("Breakfast", goal, exclusions, count=7)
@@ -50,14 +62,12 @@ class ChefMealPlannerAgent(BaseAgent):
 
         for day_idx in range(7):
             day_name = DAYS_OF_WEEK[day_idx]
-            
-            # Target calories per meal
+
             target_b_cal = target.meal_macro_distribution["Breakfast"]["calories"]
             target_l_cal = target.meal_macro_distribution["Lunch"]["calories"]
             target_d_cal = target.meal_macro_distribution["Dinner"]["calories"]
             target_s_cal = target.meal_macro_distribution["Snack"]["calories"]
 
-            # Scale selected recipes
             b_meal = scale_meal(breakfast_recipes[day_idx], target_b_cal)
             l_meal = scale_meal(lunch_recipes[day_idx], target_l_cal)
             d_meal = scale_meal(dinner_recipes[day_idx], target_d_cal)

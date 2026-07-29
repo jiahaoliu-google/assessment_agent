@@ -4,17 +4,19 @@ Parses biometric inputs and natural language user goals.
 """
 
 import re
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import UserProfile
+from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.ui import BRIGHT_CYAN
 
 
 class ProfileAnalyzerAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
         super().__init__(
             name="ProfileAnalyzerAgent",
-            role="Evaluates user physical biometric metrics and extracts structured parameters from natural language goals."
+            role="Evaluates user physical biometric metrics and extracts structured parameters from natural language goals.",
+            tool_registry=tool_registry
         )
 
     def parse_height(self, raw_height: Any) -> float:

@@ -1,27 +1,28 @@
 """
 Agent 4: Quality Control & Dietary Auditor Agent (DietaryAuditorAgent).
-Performs clinical nutritional verification, exclusion safety checks, and macro precision scoring.
+Uses 'validate_dietary_restrictions' tool via ToolRegistry/MCP.
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import FullMealPlan, AuditResult
+from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.ui import BRIGHT_CYAN
 
 
 class DietaryAuditorAgent(BaseAgent):
-    def __init__(self):
+    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
         super().__init__(
             name="DietaryAuditorAgent",
-            role="Audits generated meal plan against physiological targets, dietary restrictions, and safety guidelines."
+            role="Audits generated meal plan against physiological targets, dietary restrictions, and safety guidelines.",
+            tool_registry=tool_registry
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Executes audit inspection.
-        Expects 'full_meal_plan' in input_data.
+        Executes audit inspection using LLM tools.
         """
-        self.log("Performing full multi-factor clinical audit on 7-day meal schedule...", color=BRIGHT_CYAN)
+        self.log("Performing full multi-factor audit with validate_dietary_restrictions Tool...", color=BRIGHT_CYAN)
         plan: FullMealPlan = input_data["full_meal_plan"]
         target = plan.nutrition_target
         user = plan.user_profile
@@ -50,21 +51,32 @@ class DietaryAuditorAgent(BaseAgent):
             score -= 5
             warnings.append(f"Protein intake variance is {p_diff_pct:.1f}% ({int(avg_p)}g vs target {int(target_p)}g)")
 
-        # 3. Dietary Exclusion Audit
+        # 3. Dietary Exclusion Audit via LLM Tool
         exclusions = user.dietary_exclusions
-        exclusion_violations = 0
+        all_ingredients = [
+            ing.name
+            for day in plan.daily_plans
+            for meal in day.meals
+            for ing in meal.ingredients
+        ]
 
-        for day in plan.daily_plans:
-            for meal in day.meals:
-                meal_str = (meal.name + " " + " ".join(i.name for i in meal.ingredients)).lower()
-                for exc in exclusions:
-                    if exc.lower() in meal_str:
-                        score -= 20
-                        exclusion_violations += 1
-                        warnings.append(f"CRITICAL SAFETY WARNING: Ingredient containing '{exc}' detected in {meal.meal_type} '{meal.name}' on {day.day_name}")
+        if exclusions:
+            tool_res = self.invoke_tool(
+                "validate_dietary_restrictions",
+                ingredients=all_ingredients,
+                exclusions=exclusions
+            )
 
-        if exclusion_violations == 0 and exclusions:
-            recommendations.append(f"100% compliant with user exclusions ({', '.join(exclusions)})")
+            if tool_res.success:
+                audit_data = tool_res.data
+                if audit_data["is_compliant"]:
+                    recommendations.append(f"100% compliant with user exclusions ({', '.join(exclusions)})")
+                else:
+                    score -= 20 * audit_data["total_violations"]
+                    for v in audit_data["violations"]:
+                        warnings.append(f"SAFETY VIOLATION: '{v['ingredient']}' violates exclusion '{v['exclusion']}' ({v['reason']})")
+        else:
+            recommendations.append("No dietary exclusions specified.")
 
         # 4. Variety & Balance Audit
         unique_meals = len(set(m.name for d in plan.daily_plans for m in d.meals))
@@ -78,7 +90,7 @@ class DietaryAuditorAgent(BaseAgent):
             warnings.append("Meal variety could be increased across consecutive days")
 
         score = max(0, min(100, score))
-        passed = score >= 80 and exclusion_violations == 0
+        passed = score >= 80
 
         audit_result = AuditResult(
             score=score,
@@ -91,11 +103,7 @@ class DietaryAuditorAgent(BaseAgent):
             }
         )
 
-        self.log(f"Audit Complete: Final Score = {score}/100 ({'PASSED' if passed else 'REQUIRES ADJUSTMENT'})")
-        for rec in recommendations:
-            self.log(f"  ✓ {rec}")
-        for w in warnings:
-            self.log(f"  ⚠️ {w}")
+        self.log(f"Audit Complete: Final Score = {score}/100 ({'PASSED ✅' if passed else 'REQUIRES ADJUSTMENT ⚠️'})")
 
         self.send_message(
             recipient="GroceryPrepAgent",

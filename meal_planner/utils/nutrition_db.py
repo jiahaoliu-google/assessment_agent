@@ -519,16 +519,19 @@ def select_recipes_for_plan(
         if r["meal_type"] != meal_type:
             continue
 
-        # Check exclusions
+        # Check exclusions including allergen taxonomy derivatives
         excluded = False
         r_name_lower = r["name"].lower()
-        ing_names_lower = [i["name"].lower() for i in r["ingredients"]]
+        ing_names = [i["name"] for i in r["ingredients"]]
 
-        for exc in dietary_exclusions:
-            exc_clean = exc.lower().strip()
-            if exc_clean in r_name_lower or any(exc_clean in ing for ing in ing_names_lower):
+        from meal_planner.tools.builtin_tools import tool_validate_dietary_restrictions
+        if dietary_exclusions:
+            val_res = tool_validate_dietary_restrictions.execute(
+                ingredients=ing_names + [r["name"]],
+                exclusions=dietary_exclusions
+            )
+            if val_res.success and not val_res.data["is_compliant"]:
                 excluded = True
-                break
 
         if excluded:
             continue
