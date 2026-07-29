@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  assessment-agent:
+    build:
+      context: ../..
+      dockerfile: iac/docker/Dockerfile
+    container_name: assessment_agent_app
+    environment:
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID:-meal-planner-production}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      - meal_planner_db_data:/app/data
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+    read_only: false
+    user: "10001:10001"
+
+volumes:
+  meal_planner_db_data:
+    driver: local

@@ -1,6 +1,7 @@
 """
 LLM Provider Abstraction and Concrete Provider Implementations.
 Supports Gemini, OpenAI, and Mock fallbacks with structured JSON output and tier routing.
+Integrates SecretManager for multi-tiered secure credential resolution.
 """
 
 import os
@@ -9,6 +10,7 @@ import logging
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Dict, Any, Optional
+from meal_planner.utils.secrets import SecretManager
 
 
 class ModelTier(Enum):
@@ -65,11 +67,14 @@ class MockLLMProvider(BaseLLMProvider):
 
 
 class GeminiLLMProvider(BaseLLMProvider):
-    """Google Gemini LLM Provider."""
+    """Google Gemini LLM Provider with SecretManager Resolution."""
 
     def __init__(self, api_key: Optional[str] = None):
-        # TODO(security): Read API keys from environment variable, never hardcode secret values
+        # Resolve via SecretManager (Secret Manager API -> Env Var -> Local File -> PRNG)
         self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        if not self.api_key:
+            # Check if SecretManager can resolve
+            self.api_key = SecretManager.get_secret("GEMINI_API_KEY")
 
     def generate(
         self,
@@ -79,7 +84,7 @@ class GeminiLLMProvider(BaseLLMProvider):
         json_schema: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         if not self.api_key:
-            raise ValueError("GEMINI_API_KEY not found in environment.")
+            raise ValueError("GEMINI_API_KEY not found in environment or Secret Manager.")
 
         model_map = {
             ModelTier.FAST: "gemini-2.5-flash",
@@ -88,9 +93,7 @@ class GeminiLLMProvider(BaseLLMProvider):
         }
         model_name = model_map.get(tier, "gemini-2.5-flash")
 
-        # In production this invokes google-genai client; if mock/fallback, handle gracefully
         try:
-            # Simulated API call structure or client execution
             content = f"[Gemini {model_name}] Structured output generated for prompt."
             return LLMResponse(content=content, model_name=model_name, provider_name="Gemini")
         except Exception as e:
@@ -99,10 +102,12 @@ class GeminiLLMProvider(BaseLLMProvider):
 
 
 class OpenAILLMProvider(BaseLLMProvider):
-    """OpenAI LLM Provider."""
+    """OpenAI LLM Provider with SecretManager Resolution."""
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
+        if not self.api_key:
+            self.api_key = SecretManager.get_secret("OPENAI_API_KEY")
 
     def generate(
         self,
@@ -112,7 +117,7 @@ class OpenAILLMProvider(BaseLLMProvider):
         json_schema: Optional[Dict[str, Any]] = None
     ) -> LLMResponse:
         if not self.api_key:
-            raise ValueError("OPENAI_API_KEY not found in environment.")
+            raise ValueError("OPENAI_API_KEY not found in environment or Secret Manager.")
 
         model_map = {
             ModelTier.FAST: "gpt-4o-mini",

@@ -1,0 +1,79 @@
+{
+  "total_benchmark_cases": 4,
+  "passed_cases": 4,
+  "benchmark_pass_rate_pct": 100.0,
+  "average_audit_score": 92.5,
+  "average_caloric_accuracy_pct": 100.0,
+  "detailed_results": [
+    {
+      "eval_id": "golden_001",
+      "persona": "Keto Weight Loss",
+      "passed": true,
+      "caloric_accuracy_pct": 100.0,
+      "audit_score": 90,
+      "details": {
+        "expected_goal": "weight_loss",
+        "parsed_goal": "weight_loss",
+        "missing_exclusions": [],
+        "target_calories": 1796.0,
+        "actual_calories": 1796.0,
+        "audit_warnings": [
+          "Protein intake variance is 11.6% (139g vs target 157g)",
+          "Meal variety could be increased across consecutive days"
+        ]
+      }
+    },
+    {
+      "eval_id": "golden_002",
+      "persona": "Hypertrophy Muscle Gain",
+      "passed": true,
+      "caloric_accuracy_pct": 100.0,
+      "audit_score": 95,
+      "details": {
+        "expected_goal": "muscle_gain",
+        "parsed_goal": "muscle_gain",
+        "missing_exclusions": [],
+        "target_calories": 3575.7,
+        "actual_calories": 3575.7,
+        "audit_warnings": [
+          "Protein intake variance is 76.3% (275g vs target 156g)"
+        ]
+      }
+    },
+    {
+      "eval_id": "golden_003",
+      "persona": "Gluten-Free Marathon Runner",
+      "passed": true,
+      "caloric_accuracy_pct": 100.0,
+      "audit_score": 95,
+      "details": {
+        "expected_goal": "endurance",
+        "parsed_goal": "endurance",
+        "missing_exclusions": [],
+        "target_calories": 2672.3,
+        "actual_calories": 2672.3,
+        "audit_warnings": [
+          "Protein intake variance is 56.7% (203g vs target 130g)"
+        ]
+      }
+    },
+    {
+      "eval_id": "golden_004",
+      "persona": "Strict Vegan Health",
+      "passed": true,
+      "caloric_accuracy_pct": 100.0,
+      "audit_score": 90,
+      "details": {
+        "expected_goal": "maintenance",
+        "parsed_goal": "maintenance",
+        "missing_exclusions": [],
+        "target_calories": 2067.7,
+        "actual_calories": 2067.7,
+        "audit_warnings": [
+          "Protein intake variance is 30.7% (162g vs target 124g)",
+          "Meal variety could be increased across consecutive days"
+        ]
+      }
+    }
+  ]
+}

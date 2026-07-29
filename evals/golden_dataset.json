@@ -1,0 +1,80 @@
+[
+  {
+    "eval_id": "golden_001",
+    "persona_name": "Keto Weight Loss",
+    "inputs": {
+      "height": 175,
+      "weight": 85,
+      "goal": "Ketogenic weight loss, lose 15 lbs, no dairy, low carb",
+      "age": 30,
+      "sex": "female",
+      "activity_level": "light"
+    },
+    "expected_metrics": {
+      "parsed_goal_type": "weight_loss",
+      "expected_caloric_offset": -0.20,
+      "mandatory_exclusions": ["dairy"],
+      "max_calories": 2000,
+      "min_protein_g": 110,
+      "min_audit_score": 85
+    }
+  },
+  {
+    "eval_id": "golden_002",
+    "persona_name": "Hypertrophy Muscle Gain",
+    "inputs": {
+      "height": 182,
+      "weight": 78,
+      "goal": "Hypertrophy bulk, build muscle mass, no seafood",
+      "age": 24,
+      "sex": "male",
+      "activity_level": "heavy"
+    },
+    "expected_metrics": {
+      "parsed_goal_type": "muscle_gain",
+      "expected_caloric_offset": 0.15,
+      "mandatory_exclusions": ["seafood"],
+      "min_calories": 2800,
+      "min_protein_g": 150,
+      "min_audit_score": 85
+    }
+  },
+  {
+    "eval_id": "golden_003",
+    "persona_name": "Gluten-Free Marathon Runner",
+    "inputs": {
+      "height": 170,
+      "weight": 65,
+      "goal": "Marathon stamina training, celiac gluten-free clean carbs",
+      "age": 29,
+      "sex": "female",
+      "activity_level": "athlete"
+    },
+    "expected_metrics": {
+      "parsed_goal_type": "endurance",
+      "expected_caloric_offset": 0.10,
+      "mandatory_exclusions": ["gluten"],
+      "min_calories": 2200,
+      "min_protein_g": 100,
+      "min_audit_score": 90
+    }
+  },
+  {
+    "eval_id": "golden_004",
+    "persona_name": "Strict Vegan Health",
+    "inputs": {
+      "height": 168,
+      "weight": 62,
+      "goal": "Strict vegan plant-based diet for general health and longevity",
+      "age": 35,
+      "sex": "female",
+      "activity_level": "moderate"
+    },
+    "expected_metrics": {
+      "parsed_goal_type": "maintenance",
+      "expected_caloric_offset": 0.0,
+      "mandatory_exclusions": ["dairy", "pork", "seafood", "poultry", "eggs"],
+      "min_audit_score": 90
+    }
+  }
+]
