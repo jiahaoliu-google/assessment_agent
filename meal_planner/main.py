@@ -1,11 +1,15 @@
 """
 Main CLI Application Entry Point for Interactive Terminal Execution.
+Supports Strategic LLM Router selection, Interactive Human-In-The-Loop (HITL) Guardrails,
+SQLite Persistence, and Markdown Export.
 """
 
 import sys
 import os
 from pathlib import Path
 from meal_planner.orchestrator import MealPlannerOrchestrator
+from meal_planner.llm.router import StrategicModelRouter
+from meal_planner.hitl.manager import HITLManager
 from meal_planner.utils.export import export_to_markdown
 from meal_planner.utils.ui import (
     print_banner, print_box, print_table,
@@ -68,6 +72,10 @@ def get_user_inputs_interactive() -> dict:
 
 def render_summary_dashboard(results: dict):
     """Renders the final meal plan summary, 7-day schedule, and grocery list in terminal."""
+    if results.get("status") == "aborted":
+        print(f"\n{YELLOW}{BOLD}⚠️ Pipeline execution was aborted at human checkpoint.{RESET}\n")
+        return
+
     user = results["user_profile"]
     target = results["nutrition_target"]
     plan = results["full_meal_plan"]
@@ -130,24 +138,25 @@ def main():
     # Collect inputs
     user_inputs = get_user_inputs_interactive()
 
-    # Run Multi-Agent System Engine
-    orchestrator = MealPlannerOrchestrator()
+    # Run Multi-Agent System Engine with interactive HITL enabled
+    orchestrator = MealPlannerOrchestrator(interactive_hitl=True)
     results = orchestrator.run(user_inputs)
 
     # Render Terminal Results
     render_summary_dashboard(results)
 
-    # Export Report Option
-    export_choice = input(f"\n{BOLD}💾 Would you like to export this Meal Plan to 'meal_plan_report.md'? (Y/n): {RESET}").strip().lower()
-    if export_choice != 'n':
-        output_file = "meal_plan_report.md"
-        saved_path = export_to_markdown(
-            results["full_meal_plan"],
-            results["audit_result"],
-            results["grocery_list"],
-            output_file
-        )
-        print(f"\n{BRIGHT_GREEN}{BOLD}✨ Meal Plan successfully saved to: {saved_path}{RESET}\n")
+    if results.get("status") != "aborted":
+        # Export Report Option
+        export_choice = input(f"\n{BOLD}💾 Would you like to export this Meal Plan to 'meal_plan_report.md'? (Y/n): {RESET}").strip().lower()
+        if export_choice != 'n':
+            output_file = "meal_plan_report.md"
+            saved_path = export_to_markdown(
+                results["full_meal_plan"],
+                results["audit_result"],
+                results["grocery_list"],
+                output_file
+            )
+            print(f"\n{BRIGHT_GREEN}{BOLD}✨ Meal Plan successfully saved to: {saved_path}{RESET}\n")
 
 
 if __name__ == "__main__":

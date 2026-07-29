@@ -5,6 +5,7 @@ Uses 'web_search_recipes' and 'fetch_ingredient_nutrition' tools via ToolRegistr
 
 from typing import Dict, Any, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
+from meal_planner.llm.router import StrategicModelRouter
 from meal_planner.models import UserProfile, NutritionTarget, DailyMealPlan, FullMealPlan
 from meal_planner.prompts.system_prompts import CHEF_PLANNER_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
@@ -27,14 +28,16 @@ class ChefMealPlannerAgent(BaseAgent):
     def __init__(
         self,
         tool_registry: Optional[ToolRegistry] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        model_router: Optional[StrategicModelRouter] = None
     ):
         super().__init__(
             name="ChefMealPlannerAgent",
             role="Crafts appetizing 7-day culinary recipe plans using web recipe search and nutrition tools.",
             system_prompt=CHEF_PLANNER_SYSTEM_PROMPT,
             tool_registry=tool_registry,
-            session_id=session_id
+            session_id=session_id,
+            model_router=model_router
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -47,6 +50,10 @@ class ChefMealPlannerAgent(BaseAgent):
 
         goal = profile.parsed_goal_type
         exclusions = profile.dietary_exclusions
+
+        # Dispatch task to routed LLM tier
+        llm_resp = self.execute_llm_generation(f"Compose 7-day culinary meal structure for {goal} goal without {exclusions}")
+        self.log(f"Model Router Response [{llm_resp.provider_name}:{llm_resp.model_name}]")
 
         # 1. Invoke web_search_recipes tool
         search_res = self.invoke_tool(

@@ -5,6 +5,7 @@ Parses biometric inputs and natural language user goals.
 
 import re
 from typing import Dict, Any, Tuple, List, Optional
+from meal_planner.llm.router import StrategicModelRouter
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import UserProfile
 from meal_planner.prompts.system_prompts import PROFILE_ANALYZER_SYSTEM_PROMPT
@@ -16,14 +17,16 @@ class ProfileAnalyzerAgent(BaseAgent):
     def __init__(
         self,
         tool_registry: Optional[ToolRegistry] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        model_router: Optional[StrategicModelRouter] = None
     ):
         super().__init__(
             name="ProfileAnalyzerAgent",
             role="Evaluates user physical biometric metrics and extracts structured parameters from natural language goals.",
             system_prompt=PROFILE_ANALYZER_SYSTEM_PROMPT,
             tool_registry=tool_registry,
-            session_id=session_id
+            session_id=session_id,
+            model_router=model_router
         )
 
     def parse_height(self, raw_height: Any) -> float:
@@ -151,6 +154,11 @@ class ProfileAnalyzerAgent(BaseAgent):
         Expects input_data to contain 'height', 'weight', 'raw_goal', and optionally 'age', 'sex', 'activity_level'.
         """
         self.log("Receiving user raw inputs for biometric telemetry evaluation...", color=BRIGHT_CYAN)
+
+        # Dispatch task to routed LLM tier
+        llm_prompt = f"Analyze user goal and extract parameters: '{input_data.get('goal')}'"
+        llm_resp = self.execute_llm_generation(llm_prompt)
+        self.log(f"Model Router Response [{llm_resp.provider_name}:{llm_resp.model_name}]")
 
         raw_height = input_data.get("height", 175)
         raw_weight = input_data.get("weight", 70)

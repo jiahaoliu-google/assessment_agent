@@ -5,6 +5,7 @@ Uses 'calculate_tdee_and_macros' tool via ToolRegistry/MCP.
 
 from typing import Dict, Any, Optional
 from meal_planner.agents.base_agent import BaseAgent
+from meal_planner.llm.router import StrategicModelRouter
 from meal_planner.models import UserProfile, NutritionTarget
 from meal_planner.prompts.system_prompts import NUTRITIONIST_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
@@ -15,14 +16,16 @@ class NutritionistAgent(BaseAgent):
     def __init__(
         self,
         tool_registry: Optional[ToolRegistry] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        model_router: Optional[StrategicModelRouter] = None
     ):
         super().__init__(
             name="NutritionistAgent",
             role="Calculates exact metabolic energy expenditures (BMR, TDEE) and optimal macronutrient distributions using clinical tools.",
             system_prompt=NUTRITIONIST_SYSTEM_PROMPT,
             tool_registry=tool_registry,
-            session_id=session_id
+            session_id=session_id,
+            model_router=model_router
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -31,6 +34,10 @@ class NutritionistAgent(BaseAgent):
         """
         self.log("Computing clinical energy equations & macro allocations via MCP Tool...", color=BRIGHT_YELLOW)
         profile: UserProfile = input_data["user_profile"]
+
+        # Strategic model router dispatch
+        llm_resp = self.execute_llm_generation(f"Synthesize nutritional target parameters for goal: {profile.parsed_goal_type}")
+        self.log(f"Model Router Response [{llm_resp.provider_name}:{llm_resp.model_name}]")
 
         # Invoke Tool: calculate_tdee_and_macros
         tool_res = self.invoke_tool(

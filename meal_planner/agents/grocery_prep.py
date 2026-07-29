@@ -6,6 +6,7 @@ Consolidates all recipe ingredients into a categorized grocery list and generate
 from typing import Dict, Any, List, Optional
 from collections import defaultdict
 from meal_planner.agents.base_agent import BaseAgent
+from meal_planner.llm.router import StrategicModelRouter
 from meal_planner.models import FullMealPlan, GroceryList, GroceryCategory
 from meal_planner.prompts.system_prompts import GROCERY_PREP_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
@@ -16,14 +17,16 @@ class GroceryPrepAgent(BaseAgent):
     def __init__(
         self,
         tool_registry: Optional[ToolRegistry] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        model_router: Optional[StrategicModelRouter] = None
     ):
         super().__init__(
             name="GroceryPrepAgent",
             role="Aggregates weekly recipe ingredients into a categorized grocery shopping list and batch prep guide.",
             system_prompt=GROCERY_PREP_SYSTEM_PROMPT,
             tool_registry=tool_registry,
-            session_id=session_id
+            session_id=session_id,
+            model_router=model_router
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -33,6 +36,10 @@ class GroceryPrepAgent(BaseAgent):
         """
         self.log("Aggregating ingredients & compiling categorized weekly grocery shopping list...", color=BRIGHT_GREEN)
         plan: FullMealPlan = input_data["full_meal_plan"]
+
+        # Strategic model router dispatch
+        llm_resp = self.execute_llm_generation("Synthesize batch prep strategy and categorize grocery items.")
+        self.log(f"Model Router Response [{llm_resp.provider_name}:{llm_resp.model_name}]")
 
         # Map to combine quantities: (name, unit, category) -> total_amount
         ingredient_totals = defaultdict(float)

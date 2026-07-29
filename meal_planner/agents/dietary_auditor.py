@@ -1,10 +1,12 @@
 """
 Agent 4: Quality Control & Dietary Auditor Agent (DietaryAuditorAgent).
 Uses 'validate_dietary_restrictions' tool via ToolRegistry/MCP.
+Executes high-reasoning tier LLM auditing for safety guardrails.
 """
 
 from typing import Dict, Any, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
+from meal_planner.llm.router import StrategicModelRouter
 from meal_planner.models import FullMealPlan, AuditResult
 from meal_planner.prompts.system_prompts import DIETARY_AUDITOR_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
@@ -15,24 +17,31 @@ class DietaryAuditorAgent(BaseAgent):
     def __init__(
         self,
         tool_registry: Optional[ToolRegistry] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        model_router: Optional[StrategicModelRouter] = None
     ):
         super().__init__(
             name="DietaryAuditorAgent",
             role="Audits generated meal plan against physiological targets, dietary restrictions, and safety guidelines.",
             system_prompt=DIETARY_AUDITOR_SYSTEM_PROMPT,
             tool_registry=tool_registry,
-            session_id=session_id
+            session_id=session_id,
+            model_router=model_router
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Executes audit inspection using LLM tools.
+        Executes high-reasoning tier audit inspection using LLM tools and model routing.
         """
         self.log("Performing full multi-factor audit with validate_dietary_restrictions Tool...", color=BRIGHT_CYAN)
         plan: FullMealPlan = input_data["full_meal_plan"]
         target = plan.nutrition_target
         user = plan.user_profile
+
+        # Dispatch high-reasoning tier audit prompt via StrategicModelRouter
+        audit_prompt = f"Audit 7-day plan against target calories ({target.target_calories}) and exclusions ({user.dietary_exclusions})"
+        llm_resp = self.execute_llm_generation(audit_prompt)
+        self.log(f"Model Router Response [{llm_resp.provider_name}:{llm_resp.model_name}] (High Reasoning Guardrail)")
 
         warnings: List[str] = []
         recommendations: List[str] = []

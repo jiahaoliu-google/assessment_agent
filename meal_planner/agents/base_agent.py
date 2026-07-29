@@ -4,6 +4,8 @@ Base Agent Abstract Class for Multi-Agent System with MCP & Tool Calling Integra
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
+from meal_planner.llm.router import StrategicModelRouter
+from meal_planner.llm.provider import LLMResponse
 from meal_planner.models import AgentMessage, MemoryNode
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.tools.base import ToolResult
@@ -13,8 +15,8 @@ from meal_planner.utils.ui import log_agent_action, CYAN, RED, GREEN
 class BaseAgent(ABC):
     """
     Abstract base class for all specialized agents in the meal planning system.
-    Supports system prompts, inter-agent messaging, persistent session memory,
-    and explicit LLM tool calling via ToolRegistry & MCP.
+    Supports system prompts, strategic LLM model routing, inter-agent messaging,
+    persistent session memory, and explicit LLM tool calling via ToolRegistry & MCP.
     """
 
     def __init__(
@@ -23,16 +25,29 @@ class BaseAgent(ABC):
         role: str,
         system_prompt: str = "",
         tool_registry: Optional[ToolRegistry] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        model_router: Optional[StrategicModelRouter] = None
     ):
         self.name = name
         self.role = role
         self.system_prompt = system_prompt.strip()
         self.tool_registry = tool_registry if tool_registry else ToolRegistry()
         self.session_id = session_id
+        self.model_router = model_router if model_router else StrategicModelRouter()
         self.inbox: List[AgentMessage] = []
         self.outbox: List[AgentMessage] = []
         self.local_memories: List[MemoryNode] = []
+
+    def execute_llm_generation(self, prompt: str, json_schema: Optional[Dict[str, Any]] = None) -> LLMResponse:
+        """Executes strategic LLM routing and generation mapped to this agent's complexity tier."""
+        tier = self.model_router.get_tier_for_agent(self.name)
+        self.log(f"🧠 Dispatching task to LLM Router (Tier: '{tier.value}')", color=CYAN)
+        return self.model_router.route_and_generate(
+            agent_name=self.name,
+            prompt=prompt,
+            system_prompt=self.system_prompt,
+            json_schema=json_schema
+        )
 
     def receive_message(self, message: AgentMessage):
         """Adds incoming message to agent inbox."""
