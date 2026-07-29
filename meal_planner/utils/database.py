@@ -1,6 +1,7 @@
 """
 Persistent SQLite Database Connection Manager for Meal Planner.
-Manages persistent session state, user profiles, interaction histories, and memory nodes using parameterized queries.
+Manages persistent session state, user profiles, interaction histories, and memory nodes using parameterized queries,
+automatic PII scrubbing, and OpenTelemetry tracing spans.
 """
 
 import sqlite3
@@ -9,6 +10,8 @@ import dataclasses
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from meal_planner.models import UserProfile, AgentMessage, MemoryNode
+from meal_planner.telemetry.redactor import PIIRedactor
+from meal_planner.telemetry.tracing import default_tracer
 
 
 def default_json_serializer(obj):
@@ -25,7 +28,8 @@ def default_json_serializer(obj):
 class DatabaseManager:
     """
     Manages persistent SQLite database connections and schemas.
-    All SQL operations strictly use parameterized queries to prevent SQL injection.
+    All SQL operations strictly use parameterized queries, automatic PII scrubbing,
+    and OpenTelemetry tracing spans.
     """
 
     def __init__(self, db_path: str = "meal_planner.db"):
@@ -41,6 +45,7 @@ class DatabaseManager:
 
     def init_db(self):
         """Initializes relational table schemas for session, profile, history, and memory storage."""
+        span = default_tracer.start_span("db_init_schema")
         with self.conn:
             cursor = self.conn.cursor()
 
@@ -114,10 +119,14 @@ class DatabaseManager:
                 )
             """)
 
+        default_tracer.end_span(span)
+
     def save_session(self, session_id: str, user_id: str = "default_user", metadata: Optional[Dict[str, Any]] = None):
         """Saves or updates session entry."""
+        span = default_tracer.start_span("db_save_session", {"session_id": session_id})
         now = datetime.now().isoformat()
-        meta_str = json.dumps(metadata if metadata else {}, default=default_json_serializer)
+        sanitized_metadata = PIIRedactor.redact_dict(metadata if metadata else {})
+        meta_str = json.dumps(sanitized_metadata, default=default_json_serializer)
         with self.conn:
             self.conn.execute("""
                 INSERT INTO sessions (session_id, user_id, created_at, updated_at, metadata_json)
@@ -126,10 +135,16 @@ class DatabaseManager:
                     updated_at = excluded.updated_at,
                     metadata_json = excluded.metadata_json
             """, (session_id, user_id, now, now, meta_str))
+        default_tracer.end_span(span)
 
     def save_user_profile(self, session_id: str, profile: UserProfile):
-        """Saves or updates user profile in database."""
+        """Saves or updates user profile in database with PII scrubbing."""
+        span = default_tracer.start_span("db_save_user_profile", {"session_id": session_id})
         now = datetime.now().isoformat()
+
+        # PII Scrub raw goal before storage
+        sanitized_raw_goal = PIIRedactor.redact_text(profile.raw_goal)
+
         prefs_json = json.dumps(profile.diet_preferences, default=default_json_serializer)
         excls_json = json.dumps(profile.dietary_exclusions, default=default_json_serializer)
         with self.conn:
@@ -152,16 +167,19 @@ class DatabaseManager:
                     dietary_exclusions_json = excluded.dietary_exclusions_json
             """, (
                 session_id, profile.height_cm, profile.weight_kg, profile.age,
-                profile.sex, profile.activity_level, profile.raw_goal,
+                profile.sex, profile.activity_level, sanitized_raw_goal,
                 profile.parsed_goal_type, profile.caloric_target_offset,
                 prefs_json, excls_json, now
             ))
+        default_tracer.end_span(span)
 
     def get_user_profile(self, session_id: str) -> Optional[UserProfile]:
         """Retrieves user profile for given session_id."""
+        span = default_tracer.start_span("db_get_user_profile", {"session_id": session_id})
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM user_profiles WHERE session_id = ?", (session_id,))
         row = cursor.fetchone()
+        default_tracer.end_span(span)
         if not row:
             return None
 
@@ -179,16 +197,25 @@ class DatabaseManager:
         )
 
     def add_interaction_message(self, session_id: str, message: AgentMessage):
-        """Appends an interaction message to persistent log."""
-        payload_str = json.dumps(message.payload, default=default_json_serializer)
+        """Appends an interaction message to persistent log with automatic PII scrubbing."""
+        span = default_tracer.start_span("db_add_interaction_message", {
+            "session_id": session_id,
+            "sender": message.sender,
+            "recipient": message.recipient,
+            "message_type": message.message_type
+        })
+        sanitized_payload = PIIRedactor.redact_dict(message.payload)
+        payload_str = json.dumps(sanitized_payload, default=default_json_serializer)
         with self.conn:
             self.conn.execute("""
                 INSERT INTO interaction_history (session_id, sender, recipient, message_type, payload_json, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (session_id, message.sender, message.recipient, message.message_type, payload_str, message.timestamp))
+        default_tracer.end_span(span)
 
     def get_interaction_history(self, session_id: str) -> List[AgentMessage]:
         """Loads interaction message history for a session."""
+        span = default_tracer.start_span("db_get_interaction_history", {"session_id": session_id})
         cursor = self.conn.cursor()
         cursor.execute("""
             SELECT sender, recipient, message_type, payload_json, timestamp
@@ -197,6 +224,8 @@ class DatabaseManager:
             ORDER BY id ASC
         """, (session_id,))
         rows = cursor.fetchall()
+        default_tracer.end_span(span)
+
         messages = []
         for r in rows:
             try:
@@ -213,16 +242,25 @@ class DatabaseManager:
         return messages
 
     def add_memory_node(self, session_id: str, node: MemoryNode):
-        """Persists a memory node."""
-        val_str = json.dumps(node.value, default=default_json_serializer)
+        """Persists a memory node with automatic PII scrubbing."""
+        span = default_tracer.start_span("db_add_memory_node", {
+            "session_id": session_id,
+            "agent_name": node.agent_name,
+            "memory_type": node.memory_type,
+            "key": node.key
+        })
+        sanitized_value = PIIRedactor.redact_any(node.value)
+        val_str = json.dumps(sanitized_value, default=default_json_serializer)
         with self.conn:
             self.conn.execute("""
                 INSERT INTO memory_nodes (session_id, agent_name, memory_type, key_name, value_json, timestamp)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, (session_id, node.agent_name, node.memory_type, node.key, val_str, node.timestamp))
+        default_tracer.end_span(span)
 
     def get_memory_nodes(self, session_id: str, agent_name: Optional[str] = None, memory_type: Optional[str] = None) -> List[MemoryNode]:
         """Retrieves memory nodes for a session with optional filters."""
+        span = default_tracer.start_span("db_get_memory_nodes", {"session_id": session_id})
         query = "SELECT agent_name, memory_type, key_name, value_json, timestamp FROM memory_nodes WHERE session_id = ?"
         params = [session_id]
 
@@ -238,6 +276,7 @@ class DatabaseManager:
         cursor = self.conn.cursor()
         cursor.execute(query, params)
         rows = cursor.fetchall()
+        default_tracer.end_span(span)
 
         nodes = []
         for r in rows:
