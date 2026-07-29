@@ -7,16 +7,23 @@ import re
 from typing import Dict, Any, Tuple, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import UserProfile
+from meal_planner.prompts.system_prompts import PROFILE_ANALYZER_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.ui import BRIGHT_CYAN
 
 
 class ProfileAnalyzerAgent(BaseAgent):
-    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
+    def __init__(
+        self,
+        tool_registry: Optional[ToolRegistry] = None,
+        session_id: Optional[str] = None
+    ):
         super().__init__(
             name="ProfileAnalyzerAgent",
             role="Evaluates user physical biometric metrics and extracts structured parameters from natural language goals.",
-            tool_registry=tool_registry
+            system_prompt=PROFILE_ANALYZER_SYSTEM_PROMPT,
+            tool_registry=tool_registry,
+            session_id=session_id
         )
 
     def parse_height(self, raw_height: Any) -> float:

@@ -6,6 +6,7 @@ Uses 'web_search_recipes' and 'fetch_ingredient_nutrition' tools via ToolRegistr
 from typing import Dict, Any, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import UserProfile, NutritionTarget, DailyMealPlan, FullMealPlan
+from meal_planner.prompts.system_prompts import CHEF_PLANNER_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.nutrition_db import select_recipes_for_plan, scale_meal
 from meal_planner.utils.ui import BRIGHT_MAGENTA
@@ -23,11 +24,17 @@ DAYS_OF_WEEK = [
 
 
 class ChefMealPlannerAgent(BaseAgent):
-    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
+    def __init__(
+        self,
+        tool_registry: Optional[ToolRegistry] = None,
+        session_id: Optional[str] = None
+    ):
         super().__init__(
             name="ChefMealPlannerAgent",
             role="Crafts appetizing 7-day culinary recipe plans using web recipe search and nutrition tools.",
-            tool_registry=tool_registry
+            system_prompt=CHEF_PLANNER_SYSTEM_PROMPT,
+            tool_registry=tool_registry,
+            session_id=session_id
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:

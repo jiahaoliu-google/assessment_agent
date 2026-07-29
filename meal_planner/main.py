@@ -74,8 +74,11 @@ def render_summary_dashboard(results: dict):
     audit = results["audit_result"]
     grocery = results["grocery_list"]
 
+    session_id = results.get("session_id", "N/A")
+
     # 1. Summary Card
     summary_lines = [
+        f"Session ID       : {BOLD}{BRIGHT_MAGENTA}{session_id}{RESET} (SQLite Persistent Context & Memory Active)",
         f"Goal Evaluation  : {BOLD}{user.raw_goal}{RESET}",
         f"Goal Category    : {BOLD}{user.parsed_goal_type.upper()}{RESET} (Calorie Adjustment: {user.caloric_target_offset*100:+.0f}%)",
         f"Biometrics       : {user.height_cm} cm | {user.weight_kg} kg | BMI {user.bmi} ({user.bmi_category})",

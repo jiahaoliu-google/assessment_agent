@@ -1,9 +1,12 @@
 """
 Multi-Agent Orchestrator Engine (MealPlannerOrchestrator).
-Manages workflow state, agent handoffs, inter-agent messaging, ToolRegistry, and MCP Server.
+Manages workflow state, agent handoffs, inter-agent messaging, ToolRegistry, MCP Server,
+persistent SQLite session database, async memory operations, and context window history compaction.
 """
 
-from typing import Dict, Any, Optional
+import asyncio
+import uuid
+from typing import Dict, Any, Optional, List
 from meal_planner.agents.profile_analyzer import ProfileAnalyzerAgent
 from meal_planner.agents.nutritionist import NutritionistAgent
 from meal_planner.agents.chef_planner import ChefMealPlannerAgent
@@ -11,6 +14,9 @@ from meal_planner.agents.dietary_auditor import DietaryAuditorAgent
 from meal_planner.agents.grocery_prep import GroceryPrepAgent
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.tools.mcp_server import MCPServer
+from meal_planner.utils.database import DatabaseManager
+from meal_planner.memory.manager import AsyncMemoryManager
+from meal_planner.models import AgentMessage, SessionContext
 
 from meal_planner.utils.ui import (
     print_banner, print_agent_header, print_box, print_table,
@@ -19,21 +25,59 @@ from meal_planner.utils.ui import (
 
 
 class MealPlannerOrchestrator:
-    """Orchestrates the 5 specialized agents to create a complete 7-day meal plan via ToolRegistry & MCP."""
+    """Orchestrates 5 specialized agents to create a complete 7-day meal plan with session, memory, and database persistence."""
 
-    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
+    def __init__(
+        self,
+        tool_registry: Optional[ToolRegistry] = None,
+        db_manager: Optional[DatabaseManager] = None,
+        session_id: Optional[str] = None
+    ):
         self.tool_registry = tool_registry if tool_registry else ToolRegistry()
         self.mcp_server = MCPServer(registry=self.tool_registry)
+        self.db_manager = db_manager if db_manager else DatabaseManager()
+        self.memory_manager = AsyncMemoryManager(db_manager=self.db_manager)
 
-        self.profile_agent = ProfileAnalyzerAgent(tool_registry=self.tool_registry)
-        self.nutritionist_agent = NutritionistAgent(tool_registry=self.tool_registry)
-        self.chef_agent = ChefMealPlannerAgent(tool_registry=self.tool_registry)
-        self.auditor_agent = DietaryAuditorAgent(tool_registry=self.tool_registry)
-        self.grocery_agent = GroceryPrepAgent(tool_registry=self.tool_registry)
+        self.session_id = session_id if session_id else f"session_{uuid.uuid4().hex[:8]}"
+        self.db_manager.save_session(self.session_id)
+
+        self.profile_agent = ProfileAnalyzerAgent(tool_registry=self.tool_registry, session_id=self.session_id)
+        self.nutritionist_agent = NutritionistAgent(tool_registry=self.tool_registry, session_id=self.session_id)
+        self.chef_agent = ChefMealPlannerAgent(tool_registry=self.tool_registry, session_id=self.session_id)
+        self.auditor_agent = DietaryAuditorAgent(tool_registry=self.tool_registry, session_id=self.session_id)
+        self.grocery_agent = GroceryPrepAgent(tool_registry=self.tool_registry, session_id=self.session_id)
+
+        self.session_messages: List[AgentMessage] = []
+
+    def _run_async(self, coro):
+        """Helper to run coroutines safely in synchronous or active loop contexts."""
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            return loop.create_task(coro)
+        else:
+            return asyncio.run(coro)
+
+    def _record_and_compact_messages(self, new_messages: List[AgentMessage]):
+        """Records new messages to persistent DB and triggers async history compaction if history grows."""
+        for msg in new_messages:
+            self.session_messages.append(msg)
+            self.db_manager.add_interaction_message(self.session_id, msg)
+
+        # Trigger async history compaction
+        compacted_res = self._run_async(
+            self.memory_manager.compact_history_async(self.session_id, self.session_messages, max_messages=8)
+        )
+        if isinstance(compacted_res, list):
+            self.session_messages = compacted_res
 
     def run(self, user_inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Runs the complete multi-agent pipeline sequentially with agent-to-agent message passing and LLM tool calls.
+        Runs the complete multi-agent pipeline with persistent memory context,
+        database session tracking, and history compaction.
         """
         print_banner()
 
@@ -41,11 +85,14 @@ class MealPlannerOrchestrator:
         print_agent_header(self.profile_agent.name, self.profile_agent.role, color=BRIGHT_CYAN)
         res1 = self.profile_agent.process(user_inputs)
         user_profile = res1["user_profile"]
+        self.db_manager.save_user_profile(self.session_id, user_profile)
+        self._record_and_compact_messages(self.profile_agent.outbox)
 
         # Step 2: Nutritionist Agent
         print_agent_header(self.nutritionist_agent.name, self.nutritionist_agent.role, color=BRIGHT_YELLOW)
         res2 = self.nutritionist_agent.process({"user_profile": user_profile})
         nutrition_target = res2["nutrition_target"]
+        self._record_and_compact_messages(self.nutritionist_agent.outbox)
 
         # Step 3: Chef Meal Planner Agent
         print_agent_header(self.chef_agent.name, self.chef_agent.role, color=BRIGHT_MAGENTA)
@@ -54,18 +101,36 @@ class MealPlannerOrchestrator:
             "nutrition_target": nutrition_target
         })
         full_meal_plan = res3["full_meal_plan"]
+        self._record_and_compact_messages(self.chef_agent.outbox)
 
         # Step 4: Quality Control Auditor Agent
         print_agent_header(self.auditor_agent.name, self.auditor_agent.role, color=BRIGHT_CYAN)
         res4 = self.auditor_agent.process({"full_meal_plan": full_meal_plan})
         audit_result = res4["audit_result"]
+        self._record_and_compact_messages(self.auditor_agent.outbox)
 
         # Step 5: Shopping List & Prep Specialist Agent
         print_agent_header(self.grocery_agent.name, self.grocery_agent.role, color=BRIGHT_GREEN)
         res5 = self.grocery_agent.process({"full_meal_plan": full_meal_plan})
         grocery_list = res5["grocery_list"]
 
+        # Persist memory node summary
+        self._run_async(
+            self.memory_manager.store_memory(
+                session_id=self.session_id,
+                agent_name="MealPlannerOrchestrator",
+                key="pipeline_completion",
+                value={
+                    "goal_type": user_profile.parsed_goal_type,
+                    "target_calories": nutrition_target.target_calories,
+                    "audit_score": audit_result.score
+                },
+                memory_type="long_term"
+            )
+        )
+
         return {
+            "session_id": self.session_id,
             "user_profile": user_profile,
             "nutrition_target": nutrition_target,
             "full_meal_plan": full_meal_plan,

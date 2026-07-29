@@ -4,7 +4,7 @@ Base Agent Abstract Class for Multi-Agent System with MCP & Tool Calling Integra
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
-from meal_planner.models import AgentMessage
+from meal_planner.models import AgentMessage, MemoryNode
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.tools.base import ToolResult
 from meal_planner.utils.ui import log_agent_action, CYAN, RED, GREEN
@@ -13,15 +13,26 @@ from meal_planner.utils.ui import log_agent_action, CYAN, RED, GREEN
 class BaseAgent(ABC):
     """
     Abstract base class for all specialized agents in the meal planning system.
-    Supports inter-agent messaging and explicit LLM tool calling via ToolRegistry & MCP.
+    Supports system prompts, inter-agent messaging, persistent session memory,
+    and explicit LLM tool calling via ToolRegistry & MCP.
     """
 
-    def __init__(self, name: str, role: str, tool_registry: Optional[ToolRegistry] = None):
+    def __init__(
+        self,
+        name: str,
+        role: str,
+        system_prompt: str = "",
+        tool_registry: Optional[ToolRegistry] = None,
+        session_id: Optional[str] = None
+    ):
         self.name = name
         self.role = role
+        self.system_prompt = system_prompt.strip()
         self.tool_registry = tool_registry if tool_registry else ToolRegistry()
+        self.session_id = session_id
         self.inbox: List[AgentMessage] = []
         self.outbox: List[AgentMessage] = []
+        self.local_memories: List[MemoryNode] = []
 
     def receive_message(self, message: AgentMessage):
         """Adds incoming message to agent inbox."""
@@ -37,6 +48,24 @@ class BaseAgent(ABC):
         )
         self.outbox.append(msg)
         return msg
+
+    def build_agent_context(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Constructs a complete LLM operational context prompt payload combining:
+        1. System Prompt & Agent Role
+        2. Inbox Messages History
+        3. Local & Session Memories
+        4. Runtime Input Arguments
+        """
+        return {
+            "system_prompt": self.system_prompt,
+            "agent_name": self.name,
+            "agent_role": self.role,
+            "session_id": self.session_id,
+            "inbox_messages": [m.payload for m in self.inbox],
+            "memories": [m.value for m in self.local_memories],
+            "input_data": input_data
+        }
 
     def invoke_tool(self, tool_name: str, **kwargs) -> ToolResult:
         """
@@ -60,3 +89,4 @@ class BaseAgent(ABC):
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """Main processing method to be overridden by concrete agent implementation."""
         pass
+

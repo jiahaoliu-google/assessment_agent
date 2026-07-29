@@ -6,16 +6,23 @@ Uses 'calculate_tdee_and_macros' tool via ToolRegistry/MCP.
 from typing import Dict, Any, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import UserProfile, NutritionTarget
+from meal_planner.prompts.system_prompts import NUTRITIONIST_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.ui import BRIGHT_YELLOW
 
 
 class NutritionistAgent(BaseAgent):
-    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
+    def __init__(
+        self,
+        tool_registry: Optional[ToolRegistry] = None,
+        session_id: Optional[str] = None
+    ):
         super().__init__(
             name="NutritionistAgent",
             role="Calculates exact metabolic energy expenditures (BMR, TDEE) and optimal macronutrient distributions using clinical tools.",
-            tool_registry=tool_registry
+            system_prompt=NUTRITIONIST_SYSTEM_PROMPT,
+            tool_registry=tool_registry,
+            session_id=session_id
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:

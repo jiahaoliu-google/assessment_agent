@@ -6,16 +6,23 @@ Uses 'validate_dietary_restrictions' tool via ToolRegistry/MCP.
 from typing import Dict, Any, List, Optional
 from meal_planner.agents.base_agent import BaseAgent
 from meal_planner.models import FullMealPlan, AuditResult
+from meal_planner.prompts.system_prompts import DIETARY_AUDITOR_SYSTEM_PROMPT
 from meal_planner.tools.registry import ToolRegistry
 from meal_planner.utils.ui import BRIGHT_CYAN
 
 
 class DietaryAuditorAgent(BaseAgent):
-    def __init__(self, tool_registry: Optional[ToolRegistry] = None):
+    def __init__(
+        self,
+        tool_registry: Optional[ToolRegistry] = None,
+        session_id: Optional[str] = None
+    ):
         super().__init__(
             name="DietaryAuditorAgent",
             role="Audits generated meal plan against physiological targets, dietary restrictions, and safety guidelines.",
-            tool_registry=tool_registry
+            system_prompt=DIETARY_AUDITOR_SYSTEM_PROMPT,
+            tool_registry=tool_registry,
+            session_id=session_id
         )
 
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:

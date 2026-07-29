@@ -173,3 +173,32 @@ class AgentMessage:
     message_type: str
     payload: Dict[str, Any]
     timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass
+class MemoryNode:
+    """Represents a specific memory item stored in short-term or long-term session memory."""
+    key: str
+    value: Any
+    agent_name: str = "System"
+    memory_type: str = "short_term"  # 'short_term', 'long_term', 'compacted_summary'
+    timestamp: str = field(default_factory=lambda: datetime.now().isoformat())
+
+
+@dataclass
+class SessionContext:
+    """Stores persistent context window, memory nodes, and message history for a user session."""
+    session_id: str
+    user_id: str = "default_user"
+    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    system_prompts: Dict[str, str] = field(default_factory=dict)
+    memory_nodes: List[MemoryNode] = field(default_factory=list)
+    message_history: List[AgentMessage] = field(default_factory=list)
+    compacted_summaries: List[str] = field(default_factory=list)
+    user_profile: Optional[UserProfile] = None
+    nutrition_target: Optional[NutritionTarget] = None
+    full_meal_plan: Optional[FullMealPlan] = None
+    audit_result: Optional[AuditResult] = None
+    grocery_list: Optional[GroceryList] = None
+
